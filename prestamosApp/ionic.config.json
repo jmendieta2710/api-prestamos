@@ -1,0 +1,7 @@
+{
+  "name": "prestamosApp",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
