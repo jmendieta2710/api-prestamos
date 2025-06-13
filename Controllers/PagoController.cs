@@ -32,7 +32,7 @@ namespace PrestamosApi.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Cliente>> CreatePago(Pago pago)
+        public async Task<ActionResult<Pago>> CreatePago(Pago pago)
         {
             _context.Pagos.Add(pago);
             await _context.SaveChangesAsync();
@@ -52,7 +52,7 @@ namespace PrestamosApi.Controllers
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteCliente(int id)
+        public async Task<IActionResult> DeletePago(int id)
         {
             var pago = await _context.Pagos.FindAsync(id);
             if (pago == null)
