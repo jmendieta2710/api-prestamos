@@ -198,3 +198,4 @@ C:\Users\jmend\PrestamosApi\bin\Debug\net8.0\PrestamosApi.runtimeconfig.json
 C:\Users\jmend\PrestamosApi\bin\Debug\net8.0\PrestamosApi.pdb
 C:\Users\jmend\PrestamosApi\obj\Debug\net8.0\PrestamosApi.genruntimeconfig.cache
 C:\Users\jmend\PrestamosApi\obj\Debug\net8.0\ref\PrestamosApi.dll
+C:\Users\jmend\PrestamosApi\bin\Debug\net8.0\miPrestamoApp\package-lock.json

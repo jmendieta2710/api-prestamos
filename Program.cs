@@ -3,79 +3,108 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PrestamosApi.Data;
-using Microsoft.Data.SqlClient; // Necesario para el endpoint de prueba de DB
+using Microsoft.Data.SqlClient;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ====================================================================================
-// CONFIGURACIÓN DE SERVICIOS (TODO ANTES DE builder.Build())
-// ====================================================================================
+// =====================================================
+// CONFIGURACIÓN DE SERVICIOS
+// =====================================================
 
-// 🔧 1. Configurar cadena de conexión desde appsettings.json
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// 🔧 2. Registrar el DbContext con SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// 🔧 3. Servicios para controladores y Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
-// --- Configuración de JWT ---
-// Obtiene la clave secreta y la información del emisor/audiencia desde appsettings.json
+// ✅ 1. Configurar CORS (¡Nuevo!)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("CorsPolicy", policy =>
+    {
+        policy.AllowAnyOrigin() // En producción, se recomienda restringir esto
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
+// ✅ 2. Swagger con autenticación JWT
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Autenticación JWT usando Bearer.\n\nEjemplo: abc.def.ghi",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// ✅ 3. JWT Configuración
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
 var jwtAudience = builder.Configuration["Jwt:Audience"];
 
-// 🔧 4. Añadir servicios de Autenticación con JWT Bearer
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,          // Validar el emisor (Issuer) del token
-            ValidateAudience = true,        // Validar la audiencia (Audience) del token
-            ValidateLifetime = true,        // Validar la fecha de expiración del token
-            ValidateIssuerSigningKey = true, // Validar la clave de firma del emisor
-
-            ValidIssuer = jwtIssuer,         // El emisor válido debe coincidir con el configurado
-            ValidAudience = jwtAudience,     // La audiencia válida debe coincidir con la configurada
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)) // La clave de firma
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
 
-// 🔧 5. Añadir el servicio de Autorización
 builder.Services.AddAuthorization();
 
-// ====================================================================================
-// CONSTRUIR LA APLICACIÓN
-// ====================================================================================
-var app = builder.Build(); // ¡Esta es la ÚNICA llamada a builder.Build()!
+// =====================================================
+// CONFIGURACIÓN DE LA APLICACIÓN
+// =====================================================
 
-// ====================================================================================
-// CONFIGURACIÓN DE MIDDLEWARE (TODO DESPUÉS DE builder.Build())
-// ====================================================================================
+var app = builder.Build();
 
-// 🔧 6. Middleware (Swagger en desarrollo)
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// ✅ Middleware de CORS antes que cualquier controlador
+app.UseCors("CorsPolicy");
+
+// HTTPS redirection (puede dar problemas si solo estás usando HTTP local)
 app.UseHttpsRedirection();
 
-// 🔧 7. Middleware de Autenticación y Autorización
-// ¡CRÍTICO: El orden es importante! UseAuthentication SIEMPRE antes de UseAuthorization.
-app.UseAuthentication(); // Habilita el middleware de autenticación de JWT
-app.UseAuthorization();  // Habilita el middleware de autorización
+app.UseAuthentication();
+app.UseAuthorization();
 
-// 🔧 8. Mapear controladores
 app.MapControllers();
 
-// 🔧 9. Endpoint para probar conexión a la base de datos (para depuración)
+// Endpoint para test de conexión
 app.MapGet("/testdb", () =>
 {
     try
@@ -90,7 +119,7 @@ app.MapGet("/testdb", () =>
     }
 });
 
-// 🔧 10. Endpoint de ejemplo para clima (del template predeterminado)
+// Endpoint de ejemplo
 app.MapGet("/weatherforecast", () =>
 {
     var summaries = new[]
@@ -114,7 +143,6 @@ app.MapGet("/weatherforecast", () =>
 
 app.Run();
 
-// ✅ Record para el clima
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);

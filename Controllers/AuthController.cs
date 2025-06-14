@@ -68,31 +68,46 @@ namespace PrestamosApi.Controllers // Asegúrate de que el namespace sea 'Presta
         /// <param name="request">Credenciales del usuario (nombre de usuario y contraseña).</param>
         /// <returns>Mensaje de éxito o error de autenticación.</returns>
         [HttpPost("login")] // Endpoint: POST /api/Auth/login
-        public async Task<ActionResult<string>> Login(LoginRequest request)
-        {
-            // 1. Buscar el usuario en la base de datos por el nombre de usuario
-            var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.NombreUsuario == request.NombreUsuario);
+public async Task<ActionResult<object>> Login(LoginRequest request) // CAMBIAMOS ActionResult<string> a ActionResult<object>
+{
+    var usuario = await _context.Usuarios
+    .FirstOrDefaultAsync(u => EF.Functions.Like(u.NombreUsuario, request.NombreUsuario));
 
-            // 2. Si el usuario no se encuentra, devolver un error de no autorizado.
-            // Es buena práctica no dar pistas específicas sobre si falló el usuario o la contraseña.
-            if (usuario == null)
-            {
-                return Unauthorized("Credenciales inválidas."); // HTTP 401 Unauthorized
-            }
+    if (usuario == null || !BCrypt.Net.BCrypt.Verify(request.Contrasena, usuario.PasswordHash))
+    {
+        return Unauthorized("Credenciales inválidas.");
+    }
 
-            // 3. Verificar la contraseña ingresada contra el hash almacenado en la base de datos.
-            // BCrypt.Net.BCrypt.Verify compara la contraseña en texto plano con el hash.
-            bool passwordEsCorrecta = BCrypt.Net.BCrypt.Verify(request.Contrasena, usuario.PasswordHash);
+    // --- Generar el Token JWT ---
+    var claims = new[] // Las "declaraciones" o "claims" del token (información sobre el usuario)
+    {
+        new Claim(ClaimTypes.NameIdentifier, usuario.IdUsuario.ToString()), // ID del usuario
+        new Claim(ClaimTypes.Name, usuario.NombreUsuario),                  // Nombre de usuario
+        new Claim(ClaimTypes.Role, usuario.Rol ?? "Usuario")                // Rol del usuario
+        // Puedes añadir más claims aquí, como email, etc.
+    };
 
-            // 4. Si la contraseña no coincide, devolver un error de no autorizado
-            if (!passwordEsCorrecta)
-            {
-                return Unauthorized("Credenciales inválidas."); // HTTP 401 Unauthorized
-            }
+    var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured.");
+    var jwtIssuer = _configuration["Jwt:Issuer"];
+    var jwtAudience = _configuration["Jwt:Audience"];
 
-            // 5. Si las credenciales son válidas, el login es exitoso.
-            // *** IMPORTANTE: Aquí es donde, en el SIGUIENTE PASO, GENERAREMOS Y DEVOLVEREMOS UN TOKEN JWT. ***
-            return Ok("Login exitoso. ¡Bienvenido!"); // HTTP 200 OK
-        }
+    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+    var tokenDescriptor = new SecurityTokenDescriptor
+    {
+        Subject = new ClaimsIdentity(claims),
+        Expires = DateTime.UtcNow.AddHours(1), // El token expira en 1 hora (ajusta esto según tus necesidades)
+        SigningCredentials = creds,
+        Issuer = jwtIssuer,
+        Audience = jwtAudience
+    };
+
+    var tokenHandler = new JwtSecurityTokenHandler();
+    var token = tokenHandler.CreateToken(tokenDescriptor);
+
+    // Devolvemos el token como un objeto JSON
+    return Ok(new { token = tokenHandler.WriteToken(token), message = "Login exitoso. ¡Bienvenido!" }); 
+}
     }
 }
